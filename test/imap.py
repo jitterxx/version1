@@ -11,13 +11,14 @@ sys.setdefaultencoding("utf-8")
 server = "imap.gmail.com"
 port = "993"
 login = "sergey@reshim.com"
-password = "OO00zZOK2"
+password = ""
 date_after =  "18-oct-2014"
 date_before = "21-oct-2014"
 
 M = imaplib.IMAP4_SSL(server)
 
 print M.PROTOCOL_VERSION
+password = raw_input('Password:')
 
 M.login(login,password)
 M.select()
