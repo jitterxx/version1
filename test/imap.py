@@ -16,8 +16,29 @@ sys.setdefaultencoding("utf-8")
 def get_text(data):
     #Извлекаем из html сообщения только текст
     soup = BeautifulSoup(data)
-    return soup.get_text()
 
+    # Содержимое ссылок заменяем на LINK
+    tag = soup.new_tag(soup,"b")
+    tag.string = 'LINK'
+    for link in soup.find_all('a'):
+        link.replaceWith(tag)
+        #print link
+        
+    text = soup.get_text()
+    text = strip_text(text)
+
+    return text
+
+def strip_text(data):
+    #Delete spec \t\n\r\f\v
+    #text = re.sub(r'[\r|\n|\t]',r' ',data,re.I|re.U|re.M)
+    
+    #Multiple spaces in one
+    #text = re.sub(r'\s{2:}',r' ',data,re.I|re.U|re.M)
+    text = re.sub('\s+',' ', data,re.I|re.U|re.M).strip()
+    return text
+
+debug = True
 
 server = "imap.gmail.com"
 port = "993"
@@ -50,58 +71,91 @@ s = {}
 for num in data[0].split():
     typ, data = M.fetch(num, '(RFC822)')
 
-    #print data[0][0]
-    #print data[0][1]
-
     msg = email.message_from_string(data[0][1])
+    
+    if debug:
+        print num
     
     msg_data = {}
     for n,m in msg.items():
         k = ''
-        m = re.sub(u'[\n\r\t]',' ',m)
+        if debug:
+            #print m
+            pass
+
+        m = re.sub(u'[\n|\r|\t]',' ',m)
+        if debug:
+            #print m
+            pass
+        
         for h in email.header.decode_header(m):
+            
             k = ' '.join((k,h[0]))            
-            if not h[1] == None:            
+            if not (h[1] == None):            
                 #Делаем перекодировку в UTF8
                 k = k.decode(h[1]).encode('utf8')
             else:
                 #Проверяем что строка корректно перекодирована
-                if not chardet.detect(k)['encoding'] == 'UTF-8':
+                if not (chardet.detect(k)['encoding'] == 'UTF-8'):
                     k = k.decode(chardet.detect(k)['encoding']).encode('utf8')
-            typ, data = M.fetch(num, '(RFC822)')
-
+            
         if n in msg_data.keys():
             msg_data[n] = msg_data[n] + k
         else:
             msg_data[n] = k
     
+    if debug:
+        #print msg_data['From']
+        pass
+
     
+    msg_data['Text'] = ''
     if msg.is_multipart():
-        msg_data['Text'] = msg.get_payload(0)
-        
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain":
+                html = unicode(part.get_payload(decode=True),
+                               part.get_content_charset(),
+                               'replace').encode('utf8','replace')
+                msg_data['Text'] +=  get_text(html)
+            elif part.get_content_type() == "text/html":
+                html = unicode(part.get_payload(decode=True),
+                               part.get_content_charset(),
+                               'replace').encode('utf8','replace')
+                msg_data['Text'] +=  get_text(html)
+
     else:
-        msg_data['Text'] = msg.get_payload()
-        #print type(body_data),' is NOT multipart'
-        #print header_data['Content-Transfer-Encoding']
-        #print get_text(body_data)
+        if msg.get_content_type() == "text/plain":
+            html = unicode(msg.get_payload(decode=True),
+                           msg.get_content_charset(),
+                           'replace').encode('utf8','replace')
+            msg_data['Text'] +=  get_text(html)
+        elif msg.get_content_type() == "text/html":
+            html = unicode(msg.get_payload(decode=True),
+                           msg.get_content_charset(),
+                           'replace').encode('utf8','replace')
+            msg_data['Text'] +=  get_text(html)
     
     
     s[num] = pd.Series(msg_data.values(),msg_data.keys())
-    d = pd.Series(msg_data.values(),msg_data.keys())
 
 
 email_df = pd.DataFrame(s)
 
-print email_df.loc['Subject']
-print email_df.loc['From']
-print email_df.loc['To']
+#pd.set_option('display.max_colwidth',1000)
+
+#print email_df.loc['To']
+#print email_df.loc['From']
+#print email_df.loc['Subject']
+#print email_df.loc['Text']
+
+
+
 #print email_df.loc['References']
 #st = email_df['6286']['From']
 #print st
 
 #typ, data = M.fetch('6286', '(RFC822)')
 #msg = email.message_from_string(data[0][1])
-
 #print msg['From']
 
 
@@ -124,5 +178,10 @@ print email_df.loc['To']
 M.close()
 M.logout()
 
+f2 = open("email_df", 'w')
 
+email_df.to_json(f2,orient='columns')
+
+
+f2.close()
 
