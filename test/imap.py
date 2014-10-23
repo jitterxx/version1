@@ -22,20 +22,30 @@ def get_text(data):
     tag.string = 'LINK'
     for link in soup.find_all('a'):
         link.replaceWith(tag)
-        #print link
-        
+    for link in soup.find_all('script'):
+        link.replaceWith(tag)
+    for link in soup.find_all(''):
+        link.replaceWith(tag)
+    
     text = soup.get_text()
+    
     text = strip_text(text)
+    
 
     return text
 
 def strip_text(data):
     #Delete spec \t\n\r\f\v
-    #text = re.sub(r'[\r|\n|\t]',r' ',data,re.I|re.U|re.M)
+    #text = re.sub(u'[\r|\n|\t]+',u' ',data,re.I|re.U|re.M)
     
     #Multiple spaces in one
     #text = re.sub(r'\s{2:}',r' ',data,re.I|re.U|re.M)
-    text = re.sub('\s+',' ', data,re.I|re.U|re.M).strip()
+    #text = re.sub(u'\s+',u' ', text,re.I|re.U|re.M)
+    text = data.replace('\\n',' ')
+    text = text.replace('\\t',' ')    
+    text = text.replace('\\r',' ')
+    text = ' '.join(text.split())
+    
     return text
 
 debug = True
@@ -44,10 +54,15 @@ server = "imap.gmail.com"
 port = "993"
 login = "sergey@reshim.com"
 password = ""
-date_after =  "21-oct-2014"
+date_after =  "23-oct-2014"
 date_before = "21-oct-2014"
 
-M = imaplib.IMAP4_SSL(server)
+try:
+    M = imaplib.IMAP4_SSL(server)
+except: 
+    print 'Connection problem!', sys.exc_info()[0]
+    
+        
 
 print M.PROTOCOL_VERSION
 password = raw_input('Password:')
@@ -73,8 +88,6 @@ for num in data[0].split():
 
     msg = email.message_from_string(data[0][1])
     
-    if debug:
-        print num
     
     msg_data = {}
     for n,m in msg.items():
@@ -83,7 +96,7 @@ for num in data[0].split():
             #print m
             pass
 
-        m = re.sub(u'[\n|\r|\t]',' ',m)
+        m = strip_text(m)
         if debug:
             #print m
             pass
@@ -134,6 +147,8 @@ for num in data[0].split():
                            msg.get_content_charset(),
                            'replace').encode('utf8','replace')
             msg_data['Text'] +=  get_text(html)
+        #print 'HTML:',html
+        #print 'TEXT:',msg_data['Text']       
     
     
     s[num] = pd.Series(msg_data.values(),msg_data.keys())
@@ -146,7 +161,9 @@ email_df = pd.DataFrame(s)
 #print email_df.loc['To']
 #print email_df.loc['From']
 #print email_df.loc['Subject']
-#print email_df.loc['Text']
+print email_df.loc['Text']
+print '-------------------'
+#print email_df.loc['Text'].split('\\W*')
 
 
 
