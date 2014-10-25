@@ -10,6 +10,14 @@ import re
 import pymorphy2
 
 
+
+from sklearn.feature_extraction.text import HashingVectorizer
+from sklearn.cross_validation import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.decomposition import PCA
+from sklearn.feature_extraction.text import CountVectorizer
+
 import sys
 reload(sys)
 sys.setdefaultencoding("utf-8")
@@ -169,15 +177,48 @@ email_df = pd.read_json(f2)
 
 pd.set_option('display.max_colwidth',1000)
 
-for each in email_df.loc['Text']:
-    print each.encode('utf8')
-    print '\n--------------------------\n'
+
+text = email_df.loc['Text',6308:6309]
+print type(text)
+print text.index
+
+#raw_input('...')
+
+#split for words
+def tokenizer_1(data):
+    #print 'data tokenizer: ', data
+    morph = pymorphy2.MorphAnalyzer()
+    
+    splitter = re.compile('\W',re.I|re.U)
+    
+    clear = splitter.split(data)
+    f = []
+    for i in clear:
+        #print i
+        m = morph.parse(i)
+        if len(m) <> 0: 
+            word = m[0]
+            if word.tag.POS not in ('NUMR','PREP','CONJ','PRCL','INTJ'):
+                  f.append(word.normal_form)
+                  #print word.normal_form
+        
+    
+    return f
 
 
-morph = pymorphy2.MorphAnalyzer()
+vector = CountVectorizer()
+vector1 = HashingVectorizer(tokenizer=tokenizer_1)
 
-print morph.parse(u'приветствую')[0].normal_form
+v = vector1.fit_transform(text)
 
+#for i in vector1.get_feature_names():
+#    print i 
+
+print v
+
+
+
+    
 
 
 
