@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import chardet
 import re
 import pymorphy2
+from time import time
 
 
 
@@ -17,6 +18,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import Normalizer
 
 import sys
 reload(sys)
@@ -172,19 +177,21 @@ email_df.to_json(f2,orient='columns')
 f2.close()
 """
 
-f2 = open("email_df", 'r')
+f2 = open("email_df.old", 'r')
 email_df = pd.read_json(f2)
 
 pd.set_option('display.max_colwidth',1000)
 
 
-text = email_df.loc['Text',6308:6309]
-print type(text)
-print text.index
+text = email_df.loc['Text',6300:6309]
+print text
+index = text.index
+#print text
 
 #raw_input('...')
 
-#split for words
+#split for wordsfrom sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import Normalizer
 def tokenizer_1(data):
     #print 'data tokenizer: ', data
     morph = pymorphy2.MorphAnalyzer()
@@ -204,23 +211,61 @@ def tokenizer_1(data):
         
     
     return f
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import Normalizer
 
-
-vector = CountVectorizer()
+vector = TfidfVectorizer()
 vector1 = HashingVectorizer(tokenizer=tokenizer_1)
+svd = TruncatedSVD()
 
-v = vector1.fit_transform(text)
+print("Vectorizer")
+t0 = time()
 
-#for i in vector1.get_feature_names():
-#    print i 
+v = vector.fit_transform(text)
+v1 = vector1.fit_transform(text)
+#print v.shape,v1.shape
+#print v
+#print type(v1)
 
-print v
+print('Done in %fs' % (time() - t0))
+print('SVD transform')
+t0 = time()
+
+lsa = make_pipeline(svd, Normalizer(copy=False))
+
+tv = lsa.fit_transform(v)
+tv1 = lsa.fit_transform(v1)
+
+print('Done in %fs' % (time() - t0))
 
 
+#print tv,tv.shape
+#print tv1,tv1.shape
+
+explained_variance = svd.explained_variance_ratio_.sum()
+print("Explained variance of the SVD step: {}%".format(
+        int(explained_variance * 100)))
 
     
-
-
-
 f2.close()
+
+
+import matplotlib.pyplot as plt
+
+p = pd.DataFrame(tv,index=index,columns=list('XY'))
+p1 = pd.DataFrame(tv1,index=index,columns=list('XY'))
+print p.index
+print p1.index
+
+
+
+for i in p.index:
+    print i
+    dot = p.loc[i]
+    print type(dot)
+    plt.scatter(dot.X,dot.Y,alpha=0.5,marker='o')
+    plt.annotate(str(i), xy=dot,  xycoords='data', \
+                xytext=(-50, 30*dot.Y), textcoords='offset points',\
+                arrowprops=dict(arrowstyle="->"))
+
 
