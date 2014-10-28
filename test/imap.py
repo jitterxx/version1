@@ -106,7 +106,7 @@ def get_emails():
             if debug:
                 #print m
                 pass
-    
+            m = m.replace('?=<','?= <')
             m = strip_text(m)
             if debug and num == '6297':
                 #print m
@@ -169,7 +169,7 @@ def get_emails():
 
     return pd.DataFrame(s)
 
-"""
+
 email_df = get_emails()
 
 f2 = open("email_df", 'w')
@@ -177,21 +177,23 @@ email_df.to_json(f2,orient='columns')
 f2.close()
 """
 
+
 f2 = open("email_df.old", 'r')
 email_df = pd.read_json(f2)
-
+f2.close()
+"""
 pd.set_option('display.max_colwidth',1000)
 
 
-text = email_df.loc['Text',6300:6309]
-print text
-index = text.index
+text = email_df.loc['Text']
 #print text
+index = text.index
+print 'Samples count: ',len(text.index)
+
 
 #raw_input('...')
 
 #split for wordsfrom sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Normalizer
 def tokenizer_1(data):
     #print 'data tokenizer: ', data
     morph = pymorphy2.MorphAnalyzer()
@@ -203,39 +205,37 @@ def tokenizer_1(data):
     for i in clear:
         #print i
         m = morph.parse(i)
-        if len(m) <> 0: 
+        if len(m) > 2 and len(m)<20: 
             word = m[0]
             if word.tag.POS not in ('NUMR','PREP','CONJ','PRCL','INTJ'):
                   f.append(word.normal_form)
-                  #print word.normal_form
+                  #print word.tag.POS
         
     
     return f
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import Normalizer
 
-vector = TfidfVectorizer()
-vector1 = HashingVectorizer(tokenizer=tokenizer_1)
-svd = TruncatedSVD()
+vectorizer = TfidfVectorizer(tokenizer=tokenizer_1,use_idf=True)
+vectorizer1 = HashingVectorizer(tokenizer=tokenizer_1)
 
-print("Vectorizer")
+print("Vectorization...")
 t0 = time()
 
-v = vector.fit_transform(text)
-v1 = vector1.fit_transform(text)
-#print v.shape,v1.shape
+v = vectorizer.fit_transform(text)
+#v1 = vectorizer1.fit_transform(text)
+print 'Vector length: ', v.shape
 #print v
 #print type(v1)
 
 print('Done in %fs' % (time() - t0))
-print('SVD transform')
+print('SVD transforming...')
 t0 = time()
-
+svd = TruncatedSVD(n_components=100)
 lsa = make_pipeline(svd, Normalizer(copy=False))
 
 tv = lsa.fit_transform(v)
-tv1 = lsa.fit_transform(v1)
+#tv1 = lsa.fit_transform(v1)
 
+print 'Truncated matrix: ', tv.shape
 print('Done in %fs' % (time() - t0))
 
 
@@ -247,25 +247,80 @@ print("Explained variance of the SVD step: {}%".format(
         int(explained_variance * 100)))
 
     
-f2.close()
+
 
 
 import matplotlib.pyplot as plt
 
+"""
 p = pd.DataFrame(tv,index=index,columns=list('XY'))
-p1 = pd.DataFrame(tv1,index=index,columns=list('XY'))
-print p.index
-print p1.index
-
+#p1 = pd.DataFrame(tv1,index=index,columns=list('XY'))
 
 
 for i in p.index:
-    print i
     dot = p.loc[i]
-    print type(dot)
-    plt.scatter(dot.X,dot.Y,alpha=0.5,marker='o')
+    plt.scatter(dot.X,dot.Y,alpha=0.5,marker='o',color='red')
     plt.annotate(str(i), xy=dot,  xycoords='data', \
-                xytext=(-50, 30*dot.Y), textcoords='offset points',\
+                xytext=(50*dot.Y, 30*dot.X), textcoords='offset points',\
                 arrowprops=dict(arrowstyle="->"))
+"""
+from sklearn.cluster import KMeans
+n_clusters=8
+
+print('Do clustering...')
+km = KMeans(init='k-means++', max_iter=100, n_init=1,n_clusters=n_clusters)
+
+print("Clustering sparse data with %s" % km)
+t0 = time()
+km.fit(v)
+print("done in %0.3fs \n" % (time() - t0))
+
+print km.cluster_centers_.shape
+print km.labels_
+#print vector.get_feature_names()
+
+print("Top terms per cluster:")
+order_centroids = km.cluster_centers_.argsort()[:, ::-1]
+terms = vectorizer.get_feature_names()
+docs = {}
+for i in range(n_clusters):
+    print("Cluster %d:" % i)
+    docs[i]=list()
+    for ind in order_centroids[i, :10]:
+        print(' %s' % terms[ind])
+        pass
+    print '\n'
+
+    #Make samples sort by cluster
+    for j in range(len(km.labels_)):
+        if i == km.labels_[j]:
+            docs[i].append(index[j])
+            print email_df.loc['From',index[j]]
+
+print docs
+
+    
 
 
+def draw_clusters(km):
+    svd = TruncatedSVD(n_components=2)
+    lsa = make_pipeline(svd, Normalizer(copy=False))
+    tv = lsa.fit_transform(km.cluster_centers_)
+    
+    fig, ax = plt.subplots()
+    ax.set_title('Clusters')
+    j = 0
+    for i in tv:
+        ax.scatter(i[0],i[1],alpha=0.5,marker='o',color='green')
+        ax.annotate('Cluster '+str(j), xy=(i[0],i[1]),  xycoords='data', \
+                    xytext=(-50, j*5), textcoords='offset points',\
+                    arrowprops=dict(arrowstyle="->"))
+        j = j + 1
+        
+    ax.grid(True)
+    fig.tight_layout()
+    plt.show()
+    
+    return 
+
+draw_clusters(km)
