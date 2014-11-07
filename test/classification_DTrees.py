@@ -23,6 +23,7 @@ from sklearn.preprocessing import Normalizer
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn import metrics
+from sklearn import tree
 
 import sys
 reload(sys)
@@ -72,17 +73,18 @@ f.close()
 
 train_text = train.loc['Text']
 target = train.loc['Target']
-labels = target
+labels = map(int,target)
 print 'Train samples count: ',train_text.shape
 print 'Train target vector: ',target.shape
 
     
 
-raw_input('...')
+#raw_input('...')
 
 
 vectorizer = TfidfVectorizer(tokenizer=tokenizer_1,use_idf=True,\
-                            max_df=0.95, min_df=2,max_features=100)
+                            #max_df=0.95, min_df=2,\
+                            max_features=200)
 
 
 print("Vectorization...")
@@ -97,70 +99,51 @@ print 'Train vector length: ', train_v.shape
 print('Done in %fs' % (time() - t0))
 
 
-n_clusters=8
-print 'Cluster number: ', n_clusters
+n_cat = len(category)
+print 'Category number: ', n_cat
 
-raw_input('Clustering?')
+#raw_input('Classify?')
 
-print('Do clustering...')
-km = KMeans(init='k-means++', max_iter=100, n_init=10,n_clusters=n_clusters)
+print('Do classification...')
+cls = tree.DecisionTreeClassifier()
 
 
 #Обучаем модель
 print('Fit model...')
 
 t0 = time()
-km.fit(train_v,target)
-print('% 9s   %.2fs    %i   %.3f   %.3f   %.3f   %.3f   %.3f    %.3f'
-      % ('Train', (time() - t0), km.inertia_,
-         metrics.homogeneity_score(labels, km.labels_),
-         metrics.completeness_score(labels, km.labels_),
-         metrics.v_measure_score(labels, km.labels_),
-         metrics.adjusted_rand_score(labels, km.labels_),
-         metrics.adjusted_mutual_info_score(labels,  km.labels_),
-         metrics.silhouette_score(train_v, km.labels_,
-                                  metric='euclidean',
-                                  sample_size=300)))
 
+X = train_v.todense()
+V = v.todense()
+
+cls.fit(X,labels)
 
 #print("Clustering sparse data with %s" % km)
 print('Predicting...')
 t0 = time()
 
-Z = km.predict(v)
+Z = cls.predict(V)
 print("done in %0.3fs \n" % (time() - t0))
 
-print 'Predicted category: ',Z
-print Z.shape
+#print 'Predicted category: ',Z
+print 'Predicted samples count :',Z.shape
 
-raw_input('Draw?')
 
-print("Top terms per cluster:")
-order_centroids = km.cluster_centers_.argsort()[:, ::-1]
+print("\n")
+
 terms = vectorizer.get_feature_names()
 docs = {}
-for i in range(n_clusters):
-    print("Cluster %d:" % i)
-    docs[i]=list()
-    for ind in order_centroids[i, :10]:
-        print(' %s' % terms[ind])
-        pass
-    print '\n'
 
-    #Make samples sort by cluster
+for i in category.keys():
+    print('Category "%s":' % category[i])
+    docs[i]=list()
+
     for j in range(len(Z)):
         if i == Z[j]:
             docs[i].append(index[j])
-            print email_df.loc['From',index[j]]
+            print('  %s' % email_df.loc['From',index[j]])
+    print '\n\n'
 
-
-"""    #Make samples sort by cluster
-    for j in range(len(km.labels_)):
-        if i == km.labels_[j]:
-            docs[i].append(index[j])
-            print email_df.loc['From',index[j]]
-
-   """
 
 
 def draw_clusters(km,data):
@@ -187,4 +170,3 @@ def draw_clusters(km,data):
     
     return 
 
-draw_clusters(km,v)

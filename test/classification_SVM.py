@@ -23,6 +23,9 @@ from sklearn.preprocessing import Normalizer
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans
 from sklearn import metrics
+from sklearn import tree
+from sklearn import svm
+import numpy as np
 
 import sys
 reload(sys)
@@ -72,17 +75,18 @@ f.close()
 
 train_text = train.loc['Text']
 target = train.loc['Target']
-labels = target
+labels = map(int,target)
 print 'Train samples count: ',train_text.shape
 print 'Train target vector: ',target.shape
 
     
 
-raw_input('...')
+#raw_input('...')
 
 
 vectorizer = TfidfVectorizer(tokenizer=tokenizer_1,use_idf=True,\
-                            max_df=0.95, min_df=2,max_features=100)
+                            #max_df=0.95, min_df=2,\
+                            max_features=200)
 
 
 print("Vectorization...")
@@ -97,94 +101,103 @@ print 'Train vector length: ', train_v.shape
 print('Done in %fs' % (time() - t0))
 
 
-n_clusters=8
-print 'Cluster number: ', n_clusters
+n_cat = len(category)
+print 'Category number: ', n_cat
 
-raw_input('Clustering?')
+#raw_input('Classify?')
 
-print('Do clustering...')
-km = KMeans(init='k-means++', max_iter=100, n_init=10,n_clusters=n_clusters)
+print('Do classification...')
+C = 1.0  # SVM regularization parameter
+clf = svm.NuSVC(kernel='linear',probability=True)
+rbf_svc = svm.SVC(kernel='rbf', gamma=0.7, C=C)
+poly_svc = svm.SVC(kernel='poly', degree=3, C=C)
+lin_svc = svm.LinearSVC(C=C)
+
 
 
 #Обучаем модель
 print('Fit model...')
 
 t0 = time()
-km.fit(train_v,target)
-print('% 9s   %.2fs    %i   %.3f   %.3f   %.3f   %.3f   %.3f    %.3f'
-      % ('Train', (time() - t0), km.inertia_,
-         metrics.homogeneity_score(labels, km.labels_),
-         metrics.completeness_score(labels, km.labels_),
-         metrics.v_measure_score(labels, km.labels_),
-         metrics.adjusted_rand_score(labels, km.labels_),
-         metrics.adjusted_mutual_info_score(labels,  km.labels_),
-         metrics.silhouette_score(train_v, km.labels_,
-                                  metric='euclidean',
-                                  sample_size=300)))
 
+X = train_v.todense()
+V = v.todense()
+
+clf.fit(X,labels)
 
 #print("Clustering sparse data with %s" % km)
 print('Predicting...')
 t0 = time()
 
-Z = km.predict(v)
+Z = clf.predict(V)
+P = clf.predict_proba(V)
+
 print("done in %0.3fs \n" % (time() - t0))
 
-print 'Predicted category: ',Z
-print Z.shape
+#print 'Predicted category: ',Z
+print 'Predicted samples count :',Z.shape
 
-raw_input('Draw?')
 
-print("Top terms per cluster:")
-order_centroids = km.cluster_centers_.argsort()[:, ::-1]
+print("\n")
+
 terms = vectorizer.get_feature_names()
 docs = {}
-for i in range(n_clusters):
-    print("Cluster %d:" % i)
-    docs[i]=list()
-    for ind in order_centroids[i, :10]:
-        print(' %s' % terms[ind])
-        pass
-    print '\n'
 
-    #Make samples sort by cluster
+for i in category.keys():
+    print('Category "%s":' % category[i])
+    docs[i]=list()
+
     for j in range(len(Z)):
         if i == Z[j]:
             docs[i].append(index[j])
-            print email_df.loc['From',index[j]]
+            prob = P[j]*100
+            print('%s:  %s' % (prob,email_df.loc['From',index[j]]))
+    print '\n\n'
 
 
-"""    #Make samples sort by cluster
-    for j in range(len(km.labels_)):
-        if i == km.labels_[j]:
-            docs[i].append(index[j])
-            print email_df.loc['From',index[j]]
 
-   """
-
-
-def draw_clusters(km,data):
+def draw_clusters(data,real,target):
     
-    tv = PCA(n_components=2).fit_transform(km.cluster_centers_)
-    #rd = PCA(n_components=2).fit_transform(data)    
     
-    fig, ax = plt.subplots()
-    ax.set_title('Clusters')
-    j = 0
-    for i in tv:
-        ax.scatter(i[0],i[1],alpha=0.5,marker='o',color='green')
-        ax.annotate('Cluster '+str(j), xy=(i[0],i[1]),  xycoords='data', \
-                    xytext=(-50, j*5), textcoords='offset points',\
-                    arrowprops=dict(arrowstyle="->"))
-        j = j + 1
+    X = PCA(n_components=2).fit_transform(data)
 
-    #for i in rd:
-    #    ax.scatter(i[0],i[1],alpha=0.5,marker='x',color='red')
-        
-    ax.grid(True)
-    fig.tight_layout()
-    plt.show()
+    V = PCA(n_components=2).fit_transform(real)
+    y = target
+
+    C = 1.0  # SVM regularization parameter
+    clf = svm.SVC(kernel='linear', C=C)
+    clf.fit(X, y)
+    
+    h = .02  # step size in the mesh
+    
+    # create a mesh to plot in
+    x_min, x_max = X[:, 0].min() - 1, X[:, 0].max() + 1
+    y_min, y_max = X[:, 1].min() - 1, X[:, 1].max() + 1
+    xx, yy = np.meshgrid(np.arange(x_min, x_max, h),\
+                         np.arange(y_min, y_max, h))
+
+    plt.subplot(1, 1, 1)
+    plt.subplots_adjust(wspace=0.4, hspace=0.4)
+
+    Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+
+    # Put the result into a color plot
+    Z = Z.reshape(xx.shape)
+    plt.contourf(xx, yy, Z, cmap=plt.cm.Paired, alpha=0.8)
+
+    # Plot also the training points
+    plt.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.Paired)
+    plt.scatter(V[:, 0], V[:, 1], c='black', cmap=plt.cm.Paired)
+    plt.xlabel('Sepal length')
+    plt.ylabel('Sepal width')
+    plt.xlim(xx.min(), xx.max())
+    plt.ylim(yy.min(), yy.max())
+    plt.xticks(())
+    plt.yticks(())
+    plt.title('Email SVM')
+
+    plt.show()        
     
     return 
 
-draw_clusters(km,v)
+draw_clusters(X,V,labels)
